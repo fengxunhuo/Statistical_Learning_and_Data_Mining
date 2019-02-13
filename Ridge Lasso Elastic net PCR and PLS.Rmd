@@ -29,12 +29,12 @@ In Spam data, there are p = 57 variables to distinguish two classes, spam (coded
 #### **Data Processing**
 
 <font size=3>
-In this part, I load "tidyverse" package at first, which is good at data processing. Also. load "glmnet" and "pls" package, which are for statistical methods. Then, I load the data from "spambase.data" file and split data into training set with **3065** observations and test set with 1536 observations. At last, centralize and standardiaze 57 variables.
+In this part, I load "tidyverse" package at first, which is good at data processing. Also. load "glmnet" and "pls" package, which are for statistical methods. Then, I load the data from "spambase.data" file and split data into training set with **3065** observations and test set with 1536 observations. I don't standardize the data here because some functions has methods to standardize data.
 </font> 
 
 ```{r, load_packages, include = FALSE}
 # loading packages
-library(tidyverse)
+library(tidyverse) 
 library("glmnet")
 library("pls")
 ```
@@ -51,9 +51,9 @@ spam_train <- data_spam[train_num,]
 spam_test <- data_spam[-train_num,]
 
 # Centralize and standardize variables
-x_train <- scale(spam_train[,1:57], center = FALSE, scale = TRUE)
+x_train <- spam_train[,1:57] %>% as.matrix()
 y_train <- spam_train[,58]
-x_test <- scale(spam_test[,1:57], center = FALSE, scale = TRUE)
+x_test <- spam_test[,1:57] %>% as.matrix()
 y_test <- spam_test[,58]
 
 # Calculate length of test data set for future test error calculating
@@ -89,12 +89,12 @@ plot(cv_ridge_fit)
 # Using 1-SE rule to choose lambda for ridge
 lambda_ridge <- cv_ridge_fit$lambda.1se
 ```
-According to 1-SE rule, I choose `r lambda_ridge` as lambda for ridge.
+Therefore, I choose `r lambda_ridge` as lambda for ridge.
 </font> 
 
 ```{r}
 # Evaluate performance using test data
-y_rg <- predict(cv_ridge_fit, s = lambda_ridge, newx = x_test)
+y_rg <- predict(cv_ridge_fit, s = lambda_ridge, scale = TRUE, newx = x_test)
 # Calculate difference between predict values and true values
 ridge_diff <- abs(y_rg - y_test)
 # Calculate test error
@@ -127,12 +127,12 @@ plot(cv_lasso_fit)
 # Using 1-SE rule to choose lambda for lasso
 lambda_lasso <- cv_lasso_fit$lambda.1se
 ```
-According to 1-SE rule, I choose `r lambda_lasso` as lambda for lasso.
+Therefore, I choose `r lambda_lasso` as lambda for lasso.
 </font> 
 
 ```{r}
 # Evaluate performance using test data
-y_lp <- predict(cv_lasso_fit, s = lambda_lasso, newx = x_test)
+y_lp <- predict(cv_lasso_fit, s = lambda_lasso, scale = TRUE, newx = x_test)
 # Calculate difference between predict values and true values
 lasso_diff <- abs(y_lp - y_test)
 # Calculate test error
@@ -145,19 +145,42 @@ lasso_terr <- sum(lasso_diff > 0.5) / len_test
 <font size=3>
 3. **Elastic net**
 
+In Elastic net method, I choose 0.1, 0.2, 0.3, ... , 0.9 as alpha to find the minimum 10 fold CV error. Then set alpha with minimum 10 fold CV error to the model.
+
 ```{r}
-# Fit a LM using Elastic net
-eln_fit <- glmnet(x_train, y_train, alpha = 0.5, family="gaussian" )
 # Uisng 10 fold CV to select the constraint value
 set.seed(100)
-cv_eln_fit <- cv.glmnet(x_train, y_train, nfold=10, alpha = 0.5, family="gaussian")
+
+# Using CV for different alpha
+for (i in 1:9) {
+    assign(paste("cv_eln_fit", i, sep=""), 
+           cv.glmnet(x_train, y_train, nfold=10, alpha = i/10, family="gaussian"))
+}
+
+# Create a tibble to show average of mean CV error with different alphas
+df_alpha <-
+    tibble(
+        Alpha = c("0.1", "0.2", "0.3", "0.4", "0.5", "0.6", "0.7", "0.8", "0.9")
+        , Mean_CV_Error = c(round(mean(cv_eln_fit1$cvm), 5), round(mean(cv_eln_fit2$cvm), 5),
+                        round(mean(cv_eln_fit3$cvm), 5), round(mean(cv_eln_fit4$cvm), 5),
+                        round(mean(cv_eln_fit5$cvm), 5), round(mean(cv_eln_fit6$cvm), 5),
+                        round(mean(cv_eln_fit7$cvm), 5), round(mean(cv_eln_fit8$cvm), 5),
+                        round(mean(cv_eln_fit9$cvm), 5)))
+# Sort value according to error
+df_alpha %>% arrange(Mean_CV_Error)
 
 ```
+According to the table above, I choose alpha = 0.7 to fit the model.
+
+```{r}
+cv_eln_fit <- cv.glmnet(x_train, y_train, nfold=10, alpha = 0.7, family="gaussian")
+
+```
+
 
 ```{r, fig.align='center'}
 # Visulize result of 10-CV
 plot(cv_eln_fit)
-
 ```
 
 
@@ -165,12 +188,12 @@ plot(cv_eln_fit)
 # Using 1-SE rule to choose lambda for Elastic net
 lambda_eln <- cv_eln_fit$lambda.1se
 ```
-According to 1-SE rule, I choose `r lambda_eln` as lambda for Elastic net.
+Therefore, I choose `r lambda_eln` as lambda for Elastic net.
 </font> 
 
 ```{r}
 # Evaluate performance using test data
-y_eln <- predict(cv_eln_fit, s = lambda_eln, newx = x_test)
+y_eln <- predict(cv_eln_fit, s = lambda_eln, scale = TRUE, newx = x_test)
 # Calculate difference between predict values and true values
 eln_diff <- abs(y_eln - y_test)
 # Calculate test error
@@ -186,22 +209,22 @@ eln_terr <- sum(eln_diff > 0.5) / len_test
 ```{r}
 # Fit a LM using PCR
 set.seed(100)
-pcr_fit <- pcr(y_train ~ x_train, data = spam_train, ncomp = 56, validation="CV" )
+pcr_fit <- pcr(y_train ~ x_train, data = spam_train, scale = TRUE, ncomp = 56, validation="CV" )
 # Get CV error
 pcr_fit$validation$PRESS
 ```
 
-According to the CV errors, when using 45 components, it has minimum CV error:`r min(pcr_fit$validation$PRESS)`. Therefore, I choose 45 components to fit the model and draw the etimated coef's.
+According to the CV errors, when using 52 components, it has minimum CV error:`r min(pcr_fit$validation$PRESS)`. Therefore, I choose 45 components to fit the model and draw the etimated coef's.
 </font> 
 
 ```{r, fig.align='center'}
 # Draw the etimated coef's
-coefplot(pcr_fit, ncomp = 45)
+coefplot(pcr_fit, ncomp = 52)
 ```
 
 ```{r}
 # Evaluate performance using test data
-y_pcr <- predict(pcr_fit, x_test, ncomp = 45)
+y_pcr <- predict(pcr_fit, x_test, scale = TRUE, ncomp = 52)
 # Calculate difference between predict values and true values
 pcr_diff <- abs(y_pcr - y_test)
 # Calculate test error
@@ -216,7 +239,7 @@ pcr_terr <- sum(pcr_diff > 0.5) / len_test
 ```{r}
 # Fit a LM using PLS
 set.seed(100)
-pls_fit <- plsr(y_train ~ x_train, data = spam_train, ncomp = 56, validation="CV" )
+pls_fit <- plsr(y_train ~ x_train, data = spam_train, scale = TRUE, ncomp = 56, validation="CV" )
 # Get CV error
 pls_fit$validation$PRESS
 ```
@@ -230,7 +253,7 @@ coefplot(pls_fit, ncomp = 3)
 
 ```{r}
 # Evaluate performance using test data
-y_pls <- predict(pls_fit, x_test, ncomp = 3)
+y_pls <- predict(pls_fit, x_test, scale = TRUE, ncomp = 3)
 # Calculate difference between predict values and true values
 pls_diff <- abs(y_pls - y_test)
 # Calculate test error
@@ -252,7 +275,7 @@ df_performance <-
 df_performance
 ```
 
-Obviously, in this case, **PCR** has the minimum test error over all statistical methdos, which is `r round(pcr_terr, 5)`
+Obviously, in this case, **PLS** has the minimum test error over all statistical methdos, which is `r round(pls_terr, 5)`
 </font> 
 
 
