@@ -30,13 +30,11 @@ set.seed(1234) ## Initial seeds
 len_train <- round(len_bio / 3 * 2)
 len_test <- round(len_bio / 3)
 train_num <- sample(len_bio, len_train) ## Get the 2/3 dataset's indexes randomly.
-test_num <- sample(len_bio, len_test) ## Get the 1/3 dataset's indexes randomly.
-
 biopsy_train <- biopsy2[train_num, 2:12] ## Get training set
 y_train <- biopsy2[train_num, 12]
 
-biopsy_test <- biopsy2[test_num, 2:12] ## Get test set
-y_test <- biopsy2[test_num, 12]
+biopsy_test <- biopsy2[-train_num, 2:12] ## Get test set
+y_test <- biopsy2[-train_num, 12]
 
 
 
@@ -186,13 +184,12 @@ set.seed(2345) ## Initial seeds
 len_train <- round(len_bio / 3)
 len_test <- round(len_bio / 3 * 2)
 train_num <- sample(len_bio, len_train) ## Get the 1/3 dataset's indexes randomly.
-test_num <- sample(len_bio, len_test) ## Get the 2/3 dataset's indexes randomly.
 
 biopsy_train <- biopsy2[train_num, 2:12] ## Get training set
 y_train <- biopsy2[train_num, 12]
 
-biopsy_test <- biopsy2[test_num, 2:12] ## Get test set
-y_test <- biopsy2[test_num, 12]
+biopsy_test <- biopsy2[-train_num, 2:12] ## Get test set
+y_test <- biopsy2[-train_num, 12]
 
 
 
