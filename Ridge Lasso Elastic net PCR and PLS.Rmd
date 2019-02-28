@@ -95,10 +95,8 @@ Therefore, I choose `r lambda_ridge` as lambda for ridge.
 ```{r}
 # Evaluate performance using test data
 y_rg <- predict(cv_ridge_fit, s = lambda_ridge, scale = TRUE, newx = x_test)
-# Calculate difference between predict values and true values
-ridge_diff <- abs(y_rg - y_test)
-# Calculate test error
-ridge_terr <- sum(ridge_diff > 0.5) / len_test
+# Calculate the test error
+rg_terr <- round(mean(as.numeric(y_rg > 0.5) != y_test), 5)
 
 ```
 
@@ -133,10 +131,8 @@ Therefore, I choose `r lambda_lasso` as lambda for lasso.
 ```{r}
 # Evaluate performance using test data
 y_lp <- predict(cv_lasso_fit, s = lambda_lasso, scale = TRUE, newx = x_test)
-# Calculate difference between predict values and true values
-lasso_diff <- abs(y_lp - y_test)
-# Calculate test error
-lasso_terr <- sum(lasso_diff > 0.5) / len_test
+# Calculate the test error
+lasso_terr <- round(mean(as.numeric(y_lp > 0.5) != y_test), 5)
 
 ```
 
@@ -194,10 +190,8 @@ Therefore, I choose `r lambda_eln` as lambda for Elastic net.
 ```{r}
 # Evaluate performance using test data
 y_eln <- predict(cv_eln_fit, s = lambda_eln, scale = TRUE, newx = x_test)
-# Calculate difference between predict values and true values
-eln_diff <- abs(y_eln - y_test)
-# Calculate test error
-eln_terr <- sum(eln_diff > 0.5) / len_test
+# Calculate the test error
+eln_terr <- round(mean(as.numeric(y_eln > 0.5) != y_test), 5)
 
 ```
 
@@ -225,10 +219,8 @@ coefplot(pcr_fit, ncomp = 52)
 ```{r}
 # Evaluate performance using test data
 y_pcr <- predict(pcr_fit, x_test, scale = TRUE, ncomp = 52)
-# Calculate difference between predict values and true values
-pcr_diff <- abs(y_pcr - y_test)
-# Calculate test error
-pcr_terr <- sum(pcr_diff > 0.5) / len_test
+# Calculate the test error
+pcr_terr <- round(mean(as.numeric(y_pcr > 0.5) != y_test), 5)
 ```
 
 &nbsp;
@@ -254,10 +246,8 @@ coefplot(pls_fit, ncomp = 3)
 ```{r}
 # Evaluate performance using test data
 y_pls <- predict(pls_fit, x_test, scale = TRUE, ncomp = 3)
-# Calculate difference between predict values and true values
-pls_diff <- abs(y_pls - y_test)
-# Calculate test error
-pls_terr <- sum(pls_diff > 0.5) / len_test
+# Calculate the test error
+pls_terr <- round(mean(as.numeric(y_pls > 0.5) != y_test), 5)
 ```
 
 
@@ -268,7 +258,7 @@ pls_terr <- sum(pls_diff > 0.5) / len_test
 df_performance <-
     tibble(
         Statistical_Methods = c("ridge", "LASSO", "Elastic net", "PCR", "PLS")
-        , Test_Error = c(round(ridge_terr, 5), round(lasso_terr, 5),
+        , Test_Error = c(round(rg_terr, 5), round(lasso_terr, 5),
                         round(eln_terr, 5), round(pcr_terr, 5),
                         round(pls_terr, 5))
     )

@@ -1,0 +1,467 @@
+---
+title: "PUBH7475 Homework III"
+author: "Renchang Lu 5504577"
+date: Feb 26, 2019
+output: 
+  html_document:
+    theme: cerulean
+    highlight: tango
+    df_print: kable
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+&nbsp;
+
+#### **Introduction**
+
+<font size=3>
+In this paper, I will apply **a fully grown tree; an optimally pruned tree; random forest; boosting; a neural network, a SVM, forward stagewise regression and lasso** to Spam data. To be specific, I will take a random subset with 3065 observations as a training set, and the remaining ones as a test set. Then I will use the test set to evaluate these classifiers.
+In Spam data, there are p = 57 variables to distinguish two classes, spam (coded as 1) and email (coded as 0). There are total 1813 spams and 2788 emails.
+</font> 
+
+&nbsp;
+
+#### **Data Processing**
+
+<font size=3>
+In this part, I load "tidyverse" package at first, which is good at data processing. Also. load "tree", "randomForest", "gbm" , "nnet", "e1071" and "glmnet" package, which are for classification. Then, I load the data from "spambase.csv" file and change "label" column to factor variable. Then I split data into training set with **3065** observations and test set with 1536 observations. I don't standardize the data here because some functions has methods to standardize data.
+</font> 
+
+```{r, load_packages, include = FALSE}
+# loading packages
+library("tidyverse") 
+library("tree")
+library("randomForest")
+library("gbm")
+library("nnet")
+library("e1071")
+library("glmnet")
+```
+
+```{r data processing}
+# loading data
+data_spam <- read.csv("spambase.csv")
+data_tree <- data_spam
+# Change label to factor variable
+data_tree[which(data_tree[,58] == 1), 58] = "Spam"
+data_tree[which(data_tree[,58] == 0), 58] = "Emails"
+data_tree[,58] = data_tree[,58] %>% as.factor()
+# Split data into a training set and a test set
+set.seed(1234) 
+len_data <- nrow(data_tree) 
+train_num <- sample(len_data, 3065) 
+tree_train <- data_tree[train_num,] 
+tree_test <- data_tree[-train_num,]
+
+# Calculate length of test data set for future test error calculating
+len_test <- nrow(tree_test)
+
+```
+
+&nbsp;
+
+#### **Eight Classification Methods**
+
+<font size=3>
+As mentioned above, I will apply eight classification methods:
+
+1. **Fully Grown Tree** 
+```{r}
+# Generate a classification tree
+spam_tr <- tree(Label ~., data = tree_train, split = "deviance")
+summary(spam_tr)
+```
+
+The classification tree is showed as following
+```{r, fig.align='center', fig.width = 10, fig.height = 10}
+# Draw the tree and its label
+plot(spam_tr)
+text(spam_tr)
+
+```
+
+```{r}
+# Evaluate performance using test data
+spam_pr <- predict(spam_tr, newdata = tree_test[,1:57], type="class")
+# Show confusion matrix
+table(spam_pr, tree_test$Label)
+```
+
+```{r}
+# Misclassification rate
+tree_terr <- round((71 + 82) / len_test, 5)
+```
+
+From the confusion matrix above, we can calculate misclassification rate of test data set, using fully grown tree is `r tree_terr`.
+</font> 
+
+
+&nbsp;
+
+<font size=3>
+
+2. **Optimally Pruned Tree**
+
+```{r}
+# Repeat CV several times
+spam_cv <- cv.tree(spam_tr)
+for(i in 2:5) 
+  spam_cv$dev <- spam_cv$dev + cv.tree(spam_tr)$dev
+# Calculate deviance
+spam_cv$dev <- spam_cv$dev / 10
+
+```
+
+```{r, fig.align='center'}
+# Draw correlation between deviance and tree size
+plot(spam_cv)
+```
+
+```{r}
+# Calculate best size of subtrees
+sizek = spam_cv$size[which(spam_cv$dev == min(spam_cv$dev))]
+# Generate a classification tree with pruning
+spam_cv_tr <- prune.tree(spam_tr, best = sizek)
+```
+As we can see from the graph above, deviance is smallest when size of subtrees is `r sizek`. Therefore, I use `r sizek` size to generate pruning tree.
+
+
+The pruning classification tree is showed as following
+```{r, fig.align='center', fig.width = 10, fig.height = 10}
+# Draw the tree and its label
+plot(spam_cv_tr)
+text(spam_cv_tr)
+```
+
+```{r}
+# Evaluate performance using test data
+prun_pr <- predict(spam_cv_tr, newdata = tree_test[,1:57], type="class")
+# Show confusion matrix
+table(prun_pr, tree_test$Label)
+```
+
+```{r}
+# Misclassification rate
+prun_terr <- round((71 + 82) / len_test, 5)
+```
+
+From the confusion matrix above, we can calculate misclassification rate of test data set, using pruning tree is `r prun_terr`.
+</font> 
+
+
+&nbsp;
+
+<font size=3>
+
+3. **Random Forest**
+```{r, fig.align='center'}
+set.seed(1234)
+# Choose the best parameter
+rf_best <- tuneRF(tree_train[,1:57], tree_train[,58], mtryStart = 2)
+
+```
+From the graph above, we can see when number of variables randomly sampled as candidates at each split is 8, OOB error is the smallest. Therefore, I choose mtry = 8 to fit random forest model.
+
+```{r}
+# Generate a random forest
+set.seed(1234)
+spam_rf <- randomForest(Label ~., data = tree_train, ntree = 100, mtry = 8,
+                      nodesize = 1, importance = T)
+# Get confusion matrix
+spam_rf$confusion
+```
+
+We can also get OOB estimate of  error rate, which is `r mean(spam_rf$err.rate)`.
+
+```{r, fig.align='center'}
+plot(spam_rf)
+```
+
+According to the graph, we only need to build about 57 trees.
+
+```{r, fig.align='center', fig.width = 10, fig.height = 10}
+# Draw the importance of predictors:
+varImpPlot(spam_rf)
+```
+
+From the graph of importance of predictors, we can find predictor "Capital run length longest", "remove", "!" and "dollar notation" are very important during classification.
+
+
+```{r}
+# Calculate confusion matrix
+set.seed(1234)
+table(tree_test$Label, predict(spam_rf, tree_test, type="response"))
+```
+
+```{r}
+# Misclassification rate
+rf_terr <- round((23 + 53) / len_test, 5)
+```
+
+From the confusion matrix above, we can calculate misclassification rate of test data set, using pruning tree is `r rf_terr`.
+</font> 
+
+
+
+&nbsp;
+
+<font size=3>
+
+4. **Boosting**
+```{r}
+# Get training and test data set
+boost_train <- data_spam[train_num,] 
+boost_test <- data_spam[-train_num,]
+```
+
+```{r, fig.align='center'}
+set.seed(1234)
+# Fit adaboost model with training data
+spam_adaboost <- gbm(Label ~., data = boost_train, distribution="adaboost", 
+                     n.trees = 100, shrinkage = 0.01, bag.fraction = 0.667)
+# Draw relation between literation and exponential bound
+gbm.perf(spam_adaboost, method="OOB")
+```
+
+Obviously, when literation comes to 100, the model can still be futher improved. Therefore, I add additional trees.
+
+```{r, fig.align='center'}
+set.seed(1234)
+# Add additional trees
+spam_adaboost2 <- gbm.more(spam_adaboost, 3000)
+# Draw relation between literation and exponential bound
+gbm.perf(spam_adaboost2, method="OOB")
+```
+We can determine from the graph that the best iteration for this model is 1206, so I use n.tree = 1206 to predict.
+
+```{r}
+# Evaluate performance using test data
+set.seed(1234)
+boost_pred <- predict.gbm(spam_adaboost2, newdata = boost_test, 
+                          n.trees=1206, type="response")
+# Calculate test error
+boost_terr <- round(mean(as.numeric(boost_pred > 0.5) != boost_test$Label), 5)
+```
+
+After calculation, the test error of boosting model is `r boost_terr`.
+</font> 
+
+
+
+&nbsp;
+
+<font size=3>
+
+5. **Neural Network**
+```{r}
+set.seed(1234)
+#nnet_tune <- tune.nnet(Label~., data = tree_train, size = 5:10, decay = 0.01, 
+#                       control = tune.control(sampling = "cross", cross = 10))
+# Generate neural network
+spam_nnet <- nnet(Label ~., data = tree_train, size = 9, decay = 0.01, maxit = 500)
+# Calculate confusion matrix
+set.seed(1234)
+table(tree_test$Label, predict(spam_nnet, tree_test, type="class"))
+# Misclassification rate
+nnet_terr <- round((53 + 53) / len_test, 5)
+```
+
+I run the tune.nnet() before, and I got size = 9, decay = 0.01 is the best choice. However, for R markdown produce the pages, I comment the function. From the confusion matrix above, we can calculate misclassification rate of test data set, using neural network is `r nnet_terr`.
+
+</font> 
+
+
+
+&nbsp;
+
+<font size=3>
+
+6. **SVM**
+
+```{r, fig.align='center'}
+# Automatic grid-search in CV for best hyper-parameter
+set.seed(1234)
+#svm_tune <-
+#  tune(
+#  svm,
+#  Label ~ .,
+#  data = tree_train,
+#  ranges = list(gamma = 2 ^ (-5:5), cost = 2 ^ (-5:5)),
+#  control = tune.control(sampling = "cross", cross = 10)
+#  )
+# Get information in svm_tune
+#summary(svm_tune)
+```
+I run the svm_tune() before, and I got gamma = 0.03125 and cost = 2 is the best choice. However, for R markdown produce the pages, I comment the function. 
+
+```{r}
+# Generate SVM
+set.seed(1234)
+spam_svm <- svm(Label ~., data = tree_train, cost = 2, gamma = 0.03125)
+# Calculate confusion matrix
+table(tree_test$Label, predict(spam_svm, tree_test, cost = 2, gamma = 0.03125))
+# Misclassification rate
+svm_terr <- round((34 + 70) / len_test, 5)
+```
+From the confusion matrix above, we can calculate misclassification rate of test data set, using svm is `r svm_terr`.
+
+</font> 
+
+
+
+&nbsp;
+
+<font size=3>
+
+7. **FSR and Lasso**
+
+Let's buld lasso first.
+```{r}
+# Get data for building lasso and FSR
+x_train <- boost_train[,1:57] %>% as.matrix()
+y_train <- boost_train[,58] %>% as.matrix()
+x_test <- boost_test[,1:57] %>% as.matrix()
+y_test <- boost_test[,58] %>% as.matrix()
+```
+
+
+```{r}
+# Uisng 10 fold CV to select the constraint value
+set.seed(1234)
+cv_lasso_fit <- cv.glmnet(x_train, y_train, nfold=10, family = "gaussian")
+
+```
+
+```{r, fig.align='center'}
+# Visulize result of 10-CV
+plot(cv_lasso_fit)
+
+```
+
+
+```{r}
+# Using 1-SE rule to choose lambda for lasso
+lambda_lasso <- cv_lasso_fit$lambda.1se
+```
+Therefore, I choose `r lambda_lasso` as lambda for lasso.
+</font> 
+
+```{r}
+# Evaluate performance using test data
+set.seed(1234)
+y_lp <- predict(cv_lasso_fit, s = lambda_lasso, scale = TRUE, newx = x_test)
+# Calculate the test error
+lasso_terr <- round(mean(as.numeric(y_lp > 0.5) != y_test), 5)
+
+```
+The test error of lasso model is `r lasso_terr`.
+Let's use forward stagewise regression now.
+
+```{r}
+# Standardize data
+x_train <- scale(boost_train[,1:57])
+y_train <- boost_train[,58]
+x_test <- scale(boost_test[,1:57])
+y_test <- boost_test[,58]
+
+# This is function to estimate beta of Forward Stagewise Regression
+FSRE <- function(eps, num){
+  # Assign intial beta = 0, r = y.
+  beta <- matrix(0, ncol = ncol(x_train), nrow = 1)
+  r <- y_train
+  # Calculate correlation between predictors and r
+  rho <- abs(cor(x_train, r))
+# Do while loop until the residuals are uncorrelated with all the predictors
+  i = 1
+  for(i in 1:num) {
+    # Find predictor most related to r 
+    j <- which.max(rho)
+    # sign[hxj,ri]
+    co <- t(x_train) %*% r
+    delta <- eps * sign(co[j])
+    # Get responding beta
+    b <- beta[nrow(beta),]
+    b[j] <- b[j] + delta
+    beta <- rbind(beta,b)
+    # Get new r
+    r <- r - delta * x_train[,j]
+    # Do the loop
+    rho <- abs(cor(x_train, r))
+  }
+  beta
+}
+```
+
+```{r}
+# This is a function to predict label values
+FSR_pred <- function(matx){
+  pre <- rep(0, len_test)
+  # linear combination
+  for (k in 1:len_test) {
+    for (i in 1:length(matx)) {
+      pre[k] <- pre[k] + matx[i] * x_test[k,i]
+      
+    }
+  }
+  pre
+}
+```
+
+```{r}
+# Give different eps
+eps_small <- 0.001
+eps_big <- 0.01
+beta_small <- FSRE(eps_small, 1600)
+beta_big <- FSRE(eps_big, 120)
+```
+
+I don't use 0.1 as big epsilon here, because the data set is not suitable to do this. If I use 0.1, the graph below would be messed up.
+
+```{r, fig.align='center'}
+# Draw 
+matplot(beta_small, type = "l", lty=1, xlab = "step number", ylab = "beta", 
+        main = "stagewise")
+matplot(beta_big, type = "l", lty=1, xlab = "step number", ylab = "beta", 
+        main = "stagewise")
+```
+
+```{r}
+# Evaluate performance using test data
+y_FSR_small <- FSR_pred(beta_small[1600,])
+y_FSR_big <- FSR_pred(beta_big[120,])
+
+# Calculate test error
+FSRS_terr <- round(mean(as.numeric(y_FSR_small > 0.5) != y_test), 5)
+FSRB_terr <- round(mean(as.numeric(y_FSR_big > 0.5) != y_test), 5)
+```
+
+After calculation, the test error of forward stagewise regression model for small epsilon is `r FSRS_terr` and for big epsilon is `r FSRB_terr`.
+
+To make it clearly, all test errors are showed in following table.
+
+
+```{r}
+# create a tibble to show the result
+df_performance <-
+    tibble(
+        Statistical_Methods = c("Fully Grown Tree", "Optimally Pruned Tree", "Random Forest", "Boosting", "Neural Network", "SVM", "FSR with 0.001", "FSR with 0.1", "Lasso")
+        , Test_Error = c(tree_terr, prun_terr, rf_terr, boost_terr, 
+                         nnet_terr, svm_terr, FSRS_terr, FSRB_terr, lasso_terr)
+    )
+df_performance
+```
+
+From the table above, we can conclude that for this data set, **Random Forest** performances better, which has test error `r rf_terr`.
+
+</font>
+
+
+
+
+
+
