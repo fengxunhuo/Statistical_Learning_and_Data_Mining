@@ -1,0 +1,163 @@
+---
+title: "PUBH7475 Homework V"
+author: "Renchang Lu 5504577"
+date: April 21, 2019
+output: 
+  html_document:
+    theme: cerulean
+    highlight: tango
+    df_print: kable
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#### **Introduction**
+
+<font size=3>
+In this paper, I will apply **SVD and Funk SVD** to 100K MovieLense data set. The 100K MovieLens data consists of 1,000,000 anonymous ratings on a five-star scale from 1,000 users on 1,700 movies. 
+To be specific, I will divide the data set into training set, known test set and unknown test set. Then, use "recommenderlab" library to build a recommend system with method Popular and UBCF separately for ignorable and nonignorable data. At last, evaluate the performance by RMSE.
+</font> 
+
+&nbsp;
+
+#### **Data Processing**
+
+<font size=3>
+In this part, I load "tidyverse" package at first, which is good at data processing. Also. load "recommenderlab" package, which is for recommender system construction. Then, I load "MovieLense" data set and do 5 fold cross validation. Then, I get the training data set, known test data set and unknown test data set.
+</font> 
+
+```{r, load_packages, include = FALSE}
+# Loading packages
+library("tidyverse") 
+library("recommenderlab")
+library(reshape2)
+library(ggplot2)
+```
+
+```{r}
+# Load the data set
+data("MovieLense")
+movielense = MovieLense
+# Set seed to fix the result
+set.seed(101)
+# k value for k fold cross validation
+n_fold <- 5
+
+# Do 5 fold cross validation
+eval_sets <- evaluationScheme(data = movielense, method = "cross-validation", k = n_fold, 
+                              given = -1)
+
+eval_sets
+
+```
+
+```{r}
+# Get training set
+evaltrain <- getData(eval_sets, "train")
+# Get known test set
+evalknown <- getData(eval_sets, "known")
+# Get unknown test set
+evalunknown <- getData(eval_sets, "unknown")  
+```
+
+
+#### **Visualization**
+<font size=3>
+In this part, I did some visualization to know more about the data set.
+
+```{r, fig.align='center'}
+## visualize part of the matrix
+image(MovieLense[1:200,1:200])
+## number of ratings per user
+hist(rowCounts(MovieLense))
+## number of ratings per movie
+hist(colCounts(MovieLense))
+
+```
+
+From the graphs, it is obvious that this data set is sparse. Large amounts of users and movies do not have rating.
+</font> 
+
+&nbsp;
+
+#### **Creating recommender system model**
+
+<font size=3>
+In this part, I'll build a SVD recommender system at first, and calculate the RMSE.
+
+```{r}
+## Build SVD
+algorithms <- list(SVD = list(name = "SVD", param = NULL))
+model_svd <- Recommender(evaltrain, method = "SVD")
+
+## Predict preference scores of each user.
+svd_pre <- predict(model_svd, evalknown, type="ratings")
+## Show the prediction of first 5 users rates to 5 movies. 
+as(svd_pre, "matrix")[1:5,1:5]
+
+## Calculate RMSE
+ev_svd <- evaluate(eval_sets, algorithms, type="ratings")
+svd_accuracy <- avg(ev_svd)
+
+svd_accuracy
+```
+
+The RMSE of SVD recommender system is 1.0241. It seems high because I didn't consider the missing data.
+
+```{r, fig.align='center'}
+moviematrix <- as(movielense, "matrix")
+## Calculate standard deviation of the rating of each user
+user_std <- c()
+for (i in 1:nrow(moviematrix))
+  user_std[i] <- sd(as(movielense, "matrix")[i,], na.rm=TRUE)
+## Draw the histogram
+hist(user_std)
+```
+From the histogram, we can find that the standard deviation of each user's rating is approximately followed normal distribution, which proves that missing does not occur at random.
+
+</font> 
+
+&nbsp;
+
+#### **Recommender system model with nonignorable missing data**
+
+<font size=3>
+In this part, I'll build Funk SVD to deal with the nonignorable missing data to see how much predictive performance can be enhanced by incorporating the missing pattern.
+
+```{r}
+## Build Funk SVD
+algorithms2 <- list(SVDF = list(name = "SVDF", param = NULL))
+model_SVDF <- Recommender(evaltrain, method = "SVDF")
+## Predict preference scores of each user.
+SVDF_pre <- predict(model_SVDF, evalknown, type="ratings")
+## Show the prediction of first 5 users rates to 5 movies. 
+as(SVDF_pre, "matrix")[1:5,1:5]
+## Calculate RMSE
+ev_SVDF <- evaluate(eval_sets, algorithms2, type="ratings")
+SVDF_accuracy <- avg(ev_SVDF)
+
+SVDF_accuracy
+
+```
+
+The RMSE now is 0.9339, it proves that the predictive performance can be enhanced by incorporating the missing pattern.
+
+</font> 
+
+
+
+```{r}
+moviematrix <- as(movielense, "matrix")
+user_std <- c()
+for (i in 1:nrow(moviematrix))
+  user_std[i] <- sd(as(movielense, "matrix")[i,], na.rm=TRUE)
+```
+
+
+
+
+
